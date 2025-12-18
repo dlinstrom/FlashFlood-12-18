@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Water Level Monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .reading {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .reading-label {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .reading-value {
+            font-size: 56px;
+            font-weight: bold;
+            color: #667eea;
+            line-height: 1;
+        }
+
+        .reading-unit {
+            font-size: 24px;
+            color: #999;
+            margin-left: 5px;
+        }
+
+        .alert-level {
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 20px 0;
+        }
+
+        .alert-normal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .alert-notice {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .alert-critical {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .timestamp {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+
+        .config {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .config h3 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .config-item:last-child {
+            border-bottom: none;
+        }
+
+        .config-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .config-value {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s;
+            -webkit-appearance: none;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+            background: #5568d3;
+        }
+
+        .message-log {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            margin-top: 20px;
+        }
+
+        .message-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .message-item:last-child {
+            border-bottom: none;
+        }
+
+        .node-id {
+            background: #e9ecef;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 15px;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>💧 Water Level Monitor</h1>
+            <div id="status" class="status connecting">Connecting to MQTT...</div>
+            
+            <div class="node-id">
+                Node ID: !433d7ac8
+            </div>
+
+            <div class="reading">
+                <div class="reading-label">Water Level</div>
+                <div>
+                    <span class="reading-value" id="waterLevel">--</span>
+                    <span class="reading-unit">ft</span>
+                </div>
+            </div>
+
+            <div id="alertLevel" class="alert-level alert-normal" style="display: none;">
+                Normal Level
+            </div>
+
+            <div class="timestamp" id="timestamp">
+                Waiting for data...
+            </div>
+
+            <div class="config">
+                <h3>📊 Sensor Info</h3>
+                <div class="config-item">
+                    <span class="config-label">Distance to Water</span>
+                    <span class="config-value" id="distance">-- ft</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">CPU Temperature</span>
+                    <span class="config-value" id="cpuTemp">--°F</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Last Update</span>
+                    <span class="config-value" id="lastUpdate">--</span>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="reconnect()">Reconnect</button>
+        </div>
+
+        <div class="card">
+            <h3 style="color: #667eea; margin-bottom: 15px;">📝 Recent Messages</h3>
+            <div id="messageLog" class="message-log">
+                <div class="message-item">Waiting for messages...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MQTT Configuration - UPDATE THESE IF NEEDED
+        const MQTT_BROKER = 'broker.emqx.io'; // Your MQTT broker
+        const MQTT_PORT = 8084; // WebSocket port (typically 8083 or 8084)
+        const NODE_ID = '!433d7ac8'; // New Heltec Wireless Tracker node ID
+        const MQTT_TOPIC = `msh/US/2/json/LongFast/${NODE_ID}`;
+
+        let client = null;
+        let messageHistory = [];
+
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        function addMessageToLog(message) {
+            messageHistory.unshift({
+                time: new Date().toLocaleTimeString(),
+                text: message
+            });
+            
+            if (messageHistory.length > 20) {
+                messageHistory = messageHistory.slice(0, 20);
+            }
+
+            const logEl = document.getElementById('messageLog');
+            logEl.innerHTML = messageHistory.map(m => 
+                `<div class="message-item">[${m.time}] ${m.text}</div>`
+            ).join('');
+        }
+
+        function parseWaterLevelMessage(text) {
+            // Parse messages like: "Critical: 33.6 feet (CPU:83°F) - Water level is above critical threshold 11 feet."
+            // Or: "Info: 2.5 feet (CPU:83°F) - Water level is normal."
+            
+            const levelMatch = text.match(/(Critical|Warning|Notice|Info):\s*([\d.]+)\s*feet/i);
+            const cpuMatch = text.match(/CPU:\s*([\d.]+)\s*°F/i);
+            const distanceMatch = text.match(/Average distance:\s*([\d.]+)\s*feet/i);
+            
+            if (levelMatch) {
+                const alertType = levelMatch[1];
+                const waterLevel = parseFloat(levelMatch[2]);
+                const cpuTemp = cpuMatch ? parseFloat(cpuMatch[1]) : null;
+                
+                return {
+                    alertType,
+                    waterLevel,
+                    cpuTemp,
+                    distance: distanceMatch ? parseFloat(distanceMatch[1]) : null,
+                    fullMessage: text
+                };
+            }
+            
+            return null;
+        }
+
+        function updateDisplay(data) {
+            // Update water level
+            document.getElementById('waterLevel').textContent = data.waterLevel.toFixed(1);
+            
+            // Update alert level
+            const alertEl = document.getElementById('alertLevel');
+            alertEl.style.display = 'block';
+            
+            const alertType = data.alertType.toLowerCase();
+            alertEl.className = `alert-level alert-${alertType === 'info' ? 'normal' : alertType}`;
+            
+            const alertTexts = {
+                'critical': '🚨 CRITICAL',
+                'warning': '⚠️ WARNING',
+                'notice': '📢 NOTICE',
+                'info': '✅ NORMAL'
+            };
+            
+            alertEl.textContent = alertTexts[alertType] || data.alertType;
+            
+            // Update sensor info
+            if (data.distance) {
+                document.getElementById('distance').textContent = `${data.distance.toFixed(1)} ft`;
+            }
+            
+            if (data.cpuTemp) {
+                document.getElementById('cpuTemp').textContent = `${data.cpuTemp.toFixed(0)}°F`;
+            }
+            
+            // Update timestamps
+            const now = new Date();
+            document.getElementById('timestamp').textContent = `Last reading: ${now.toLocaleTimeString()}`;
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        }
+
+        function connectMQTT() {
+            updateStatus('Connecting to MQTT broker...', 'connecting');
+            addMessageToLog('Connecting to MQTT broker...');
+
+            const wsUrl = `wss://${MQTT_BROKER}:${MQTT_PORT}/mqtt`;
+            
+            client = mqtt.connect(wsUrl, {
+                clean: true,
+                reconnectPeriod: 5000,
+                connectTimeout: 10000
+            });
+
+            client.on('connect', () => {
+                updateStatus('Connected - Listening for data', 'connected');
+                addMessageToLog(`Connected to ${MQTT_BROKER}`);
+                addMessageToLog(`Subscribed to: ${MQTT_TOPIC}`);
+                
+                client.subscribe(MQTT_TOPIC, (err) => {
+                    if (err) {
+                        addMessageToLog(`Subscription error: ${err.message}`);
+                    } else {
+                        addMessageToLog('Successfully subscribed to topic');
+                    }
+                });
+            });
+
+            client.on('message', (topic, message) => {
+                try {
+                    const data = JSON.parse(message.toString());
+                    
+                    // Extract text from Meshtastic message
+                    let messageText = '';
+                    if (data.payload && data.payload.text) {
+                        messageText = data.payload.text;
+                    } else if (data.text) {
+                        messageText = data.text;
+                    }
+                    
+                    if (messageText) {
+                        addMessageToLog(messageText);
+                        
+                        const parsed = parseWaterLevelMessage(messageText);
+                        if (parsed) {
+                            updateDisplay(parsed);
+                        }
+                    }
+                } catch (e) {
+                    addMessageToLog(`Parse error: ${e.message}`);
+                }
+            });
+
+            client.on('error', (err) => {
+                updateStatus('Connection error', 'disconnected');
+                addMessageToLog(`Error: ${err.message}`);
+            });
+
+            client.on('offline', () => {
+                updateStatus('Disconnected - Reconnecting...', 'disconnected');
+                addMessageToLog('Disconnected from broker');
+            });
+
+            client.on('reconnect', () => {
+                updateStatus('Reconnecting...', 'connecting');
+                addMessageToLog('Attempting to reconnect...');
+            });
+        }
+
+        function reconnect() {
+            addMessageToLog('Manual reconnect triggered');
+            if (client) {
+                client.end(true);
+            }
+            setTimeout(connectMQTT, 500);
+        }
+
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            addMessageToLog('Dashboard loaded');
+            connectMQTT();
+        });
+
+        // Prevent sleep on mobile
+        let wakeLock = null;
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').then(lock => {
+                wakeLock = lock;
+                addMessageToLog('Screen wake lock enabled');
+            }).catch(() => {
+                addMessageToLog('Wake lock not available');
+            });
+        }
+    </script>
+</body>
+</html>
